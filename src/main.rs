@@ -1,14 +1,19 @@
-use notify::EventKind::Create;
-use notify::{RecursiveMode, Result, Watcher};
+use notify::{recommended_watcher, Event, EventKind::Create, RecursiveMode, Watcher};
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
+/*
+ * Transcode a file to 16kHz mono WAV format.
+ */
 fn transcoder_thread(path: &str, outpath: &str) {
     let filename = Path::new(path).file_name().unwrap().to_str().unwrap();
     let filename = filename.split('.').next().unwrap();
     let outfile = format!("{}/{}_transcoded.wav", outpath, filename);
+
+    // Transcode the file to 16kHz mono WAV format
     let output = Command::new("ffmpeg")
         .args([
             "-i",
@@ -27,11 +32,17 @@ fn transcoder_thread(path: &str, outpath: &str) {
     if output.status.success() {
         println!("Transcoding successful, saved to {}", outfile);
     } else {
-        println!("Transcoding failed.");
+        println!(
+            "Transcoding failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }
 
-fn consumer_thread(rx: std::sync::mpsc::Receiver<PathBuf>, outpath: &str) {
+/*
+ * Consumer thread to process transcoding jobs.
+ */
+fn consumer_thread(rx: Receiver<PathBuf>, outpath: &str) {
     loop {
         if let Ok(path) = rx.recv() {
             println!("Processing file: {:?}", path);
@@ -43,7 +54,10 @@ fn consumer_thread(rx: std::sync::mpsc::Receiver<PathBuf>, outpath: &str) {
     }
 }
 
-fn handle_event(event: &notify::Event, tx: &Sender<PathBuf>) {
+/*
+ * Handle file creation events, put them in the queue.
+ */
+fn handle_event(event: &Event, tx: &Sender<PathBuf>) {
     match event {
         notify::Event {
             kind: Create(_),
@@ -62,7 +76,10 @@ fn handle_event(event: &notify::Event, tx: &Sender<PathBuf>) {
     }
 }
 
-fn main() -> Result<()> {
+/*
+ * Main function.
+ */
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args().len() != 3 {
         println!(
             "Usage: {} <in path> <out path>",
@@ -72,9 +89,12 @@ fn main() -> Result<()> {
     }
 
     let outpath = std::env::args().nth(2).unwrap();
+
+    // Create a channel for the consumer thread
     let (tx, rx) = channel();
+
     let path = std::env::args().nth(1).unwrap();
-    let mut watcher = notify::recommended_watcher(move |res| match res {
+    let mut watcher = recommended_watcher(move |res| match res {
         Ok(event) => handle_event(&event, &tx),
         Err(e) => println!("Watch error: {:?}", e),
     })?;
@@ -89,6 +109,6 @@ fn main() -> Result<()> {
     });
 
     loop {
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        thread::sleep(std::time::Duration::from_secs(1));
     }
 }
