@@ -42,7 +42,7 @@ fn transcoder_thread(path: &str, outpath: &str) {
 /*
  * Consumer thread to process transcoding jobs.
  */
-fn consumer_thread(rx: Receiver<PathBuf>, outpath: &str) {
+fn consumer_thread(rx: &Receiver<PathBuf>, outpath: &str) {
     loop {
         if let Ok(path) = rx.recv() {
             println!("Processing file: {:?}", path);
@@ -105,7 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Start consumer thread
     thread::spawn(move || {
-        consumer_thread(rx, &outpath);
+        consumer_thread(&rx, &outpath);
     });
 
     loop {
