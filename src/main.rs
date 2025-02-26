@@ -3,7 +3,14 @@
 //! This program watches a directory for new audio files and transcodes them
 //! to 16kHz mono WAV format.
 //!
-
+//! Run the program with the input and output directories as arguments:
+//!
+//! ```sh
+//! cargo run -- -i input_dir -o output_dir
+//! ```
+//!
+//! The program uses ffmpeg for transcoding, so make sure it is installed.
+//!
 use clap::Parser;
 use log::{error, info};
 use notify::{recommended_watcher, Event, EventKind::Create, RecursiveMode, Watcher};
