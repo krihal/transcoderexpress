@@ -1,3 +1,9 @@
+//! Transcode audio files to 16kHz mono WAV format.
+//!
+//! This program watches a directory for new audio files and transcodes them
+//! to 16kHz mono WAV format.
+//!
+
 use clap::Parser;
 use log::{error, info};
 use notify::{recommended_watcher, Event, EventKind::Create, RecursiveMode, Watcher};
@@ -6,9 +12,7 @@ use std::process::Command;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
-/*
- * Command line arguments.
- */
+/// Command line arguments.
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
@@ -18,10 +22,8 @@ struct Cli {
     output_dir: Option<String>,
 }
 
-/*
- * Transcode a file to 16kHz mono WAV format.
- */
-fn transcoder_thread(path: &str, outpath: &str) {
+/// Launches ffmpeg on a file and transcode it to 16kHz mono WAV format.
+fn transcoder(path: &str, outpath: &str) {
     let filename = Path::new(path).file_name().unwrap().to_str().unwrap();
     let filename = filename.split('.').next().unwrap();
     let outfile = format!("{}/{}_transcoded.wav", outpath, filename);
@@ -52,14 +54,12 @@ fn transcoder_thread(path: &str, outpath: &str) {
     }
 }
 
-/*
- * Consumer thread to process transcoding jobs.
- */
+/// Consumer thread that processes files from the queue.
 fn consumer_thread(rx: &Receiver<PathBuf>, outpath: &str) {
     loop {
         if let Ok(path) = rx.recv() {
             info!("Processing file: {:?}", path);
-            transcoder_thread(path.to_str().unwrap(), outpath);
+            transcoder(path.to_str().unwrap(), outpath);
             info!("Done processing file: {:?}", path);
         } else {
             error!("Error receiving file path.");
@@ -67,9 +67,7 @@ fn consumer_thread(rx: &Receiver<PathBuf>, outpath: &str) {
     }
 }
 
-/*
- * Handle file creation events, put them in the queue.
- */
+/// Handle file creation events.
 fn handle_event(event: &Event, tx: &Sender<PathBuf>) {
     if let notify::Event {
         kind: Create(_),
@@ -86,9 +84,7 @@ fn handle_event(event: &Event, tx: &Sender<PathBuf>) {
     }
 }
 
-/*
- * Main function.
- */
+/// Main function.
 fn main() -> std::io::Result<()> {
     let args = Cli::parse();
     let input_dir = args.input_dir.unwrap();
