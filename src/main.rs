@@ -1,9 +1,22 @@
+use clap::Parser;
+
+use log::{error, info};
+
 use notify::{recommended_watcher, Event, EventKind::Create, RecursiveMode, Watcher};
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    #[arg(short, long, value_name = "INPUT_DIR", required = true)]
+    input_dir: Option<String>,
+    #[arg(short, long, value_name = "OUTPUT_DIR", required = true)]
+    output_dir: Option<String>,
+}
 
 /*
  * Transcode a file to 16kHz mono WAV format.
@@ -30,9 +43,9 @@ fn transcoder_thread(path: &str, outpath: &str) {
         .expect("Failed to execute ffmpeg");
 
     if output.status.success() {
-        println!("Transcoding successful, saved to {}", outfile);
+        info!("Transcoding successful, saved to {}", outfile);
     } else {
-        println!(
+        error!(
             "Transcoding failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
@@ -45,11 +58,11 @@ fn transcoder_thread(path: &str, outpath: &str) {
 fn consumer_thread(rx: &Receiver<PathBuf>, outpath: &str) {
     loop {
         if let Ok(path) = rx.recv() {
-            println!("Processing file: {:?}", path);
+            info!("Processing file: {:?}", path);
             transcoder_thread(path.to_str().unwrap(), outpath);
-            println!("Done processing file: {:?}", path);
+            info!("Done processing file: {:?}", path);
         } else {
-            println!("Error receiving file path.");
+            error!("Error receiving file path.");
         }
     }
 }
@@ -65,10 +78,10 @@ fn handle_event(event: &Event, tx: &Sender<PathBuf>) {
             ..
         } => {
             for path in paths {
-                println!("File created: {:?}, adding to queue.", path);
+                info!("File created, adding to queue: {:?}", path);
                 match tx.send(path.to_path_buf()) {
                     Ok(_) => {}
-                    Err(e) => println!("Error sending path: {:?}", e),
+                    Err(e) => error!("Error sending path: {:?}", e),
                 }
             }
         }
@@ -79,33 +92,33 @@ fn handle_event(event: &Event, tx: &Sender<PathBuf>) {
 /*
  * Main function.
  */
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    if std::env::args().len() != 3 {
-        println!(
-            "Usage: {} <in path> <out path>",
-            std::env::args().nth(0).unwrap()
-        );
-        std::process::exit(1);
-    }
+fn main() -> std::io::Result<()> {
+    let args = Cli::parse();
+    let input_dir = args.input_dir.unwrap();
+    let output_dir = args.output_dir.unwrap();
 
-    let outpath = std::env::args().nth(2).unwrap();
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Debug)
+        .format_target(false)
+        .format_timestamp(Some(env_logger::TimestampPrecision::Millis))
+        .init();
 
     // Create a channel for the consumer thread
     let (tx, rx) = channel();
 
-    let path = std::env::args().nth(1).unwrap();
     let mut watcher = recommended_watcher(move |res| match res {
         Ok(event) => handle_event(&event, &tx),
         Err(e) => println!("Watch error: {:?}", e),
-    })?;
+    })
+    .expect("Failed to create watcher");
 
-    watcher.watch(Path::new(&path), RecursiveMode::Recursive)?;
+    let _ = watcher.watch(Path::new(&input_dir), RecursiveMode::Recursive);
 
-    println!("Watching directory {}.", path);
+    info!("Watching directory: {}", input_dir);
 
     // Start consumer thread
     thread::spawn(move || {
-        consumer_thread(&rx, &outpath);
+        consumer_thread(&rx, &output_dir);
     });
 
     loop {
