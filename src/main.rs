@@ -1,14 +1,14 @@
 use clap::Parser;
-
 use log::{error, info};
-
 use notify::{recommended_watcher, Event, EventKind::Create, RecursiveMode, Watcher};
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
+/*
+ * Command line arguments.
+ */
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
@@ -71,21 +71,18 @@ fn consumer_thread(rx: &Receiver<PathBuf>, outpath: &str) {
  * Handle file creation events, put them in the queue.
  */
 fn handle_event(event: &Event, tx: &Sender<PathBuf>) {
-    match event {
-        notify::Event {
-            kind: Create(_),
-            paths,
-            ..
-        } => {
-            for path in paths {
-                info!("File created, adding to queue: {:?}", path);
-                match tx.send(path.to_path_buf()) {
-                    Ok(_) => {}
-                    Err(e) => error!("Error sending path: {:?}", e),
-                }
+    if let notify::Event {
+        kind: Create(_),
+        paths,
+        ..
+    } = event
+    {
+        for path in paths {
+            info!("File created, adding to queue: {:?}", path);
+            if let Err(e) = tx.send(path.to_path_buf()) {
+                error!("Error sending path: {}", e);
             }
         }
-        _ => {}
     }
 }
 
