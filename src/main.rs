@@ -34,20 +34,21 @@ fn transcoder(path: &str, outpath: &str) {
     let filename = Path::new(path).file_name().unwrap().to_str().unwrap();
     let filename = filename.split('.').next().unwrap();
     let outfile = format!("{}/{}_transcoded.wav", outpath, filename);
+    let args = [
+        "-i",
+        path,
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-sample_fmt",
+        "s16",
+        &outfile,
+    ];
 
     // Transcode the file to 16kHz mono WAV format
     let output = Command::new("ffmpeg")
-        .args([
-            "-i",
-            path,
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            "-sample_fmt",
-            "s16",
-            &outfile,
-        ])
+        .args(args)
         .output()
         .expect("Failed to execute ffmpeg");
 
